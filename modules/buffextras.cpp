@@ -25,49 +25,64 @@ public:
 
 	virtual ~CBuffExtras() {}
 
-	void AddBuffer(CChan& Channel, const CString& sMessage) {
+	bool WantAdd(CChan& Channel) {
 		// If they have AutoClearChanBuffer enabled, only add messages if no client is connected
-		if (Channel.AutoClearChanBuffer() && m_pNetwork->IsUserOnline())
-			return;
-
-		Channel.AddBuffer(":" + GetModNick() + "!" + GetModName() + "@znc.in PRIVMSG " + _NAMEDFMT(Channel.GetName()) + " :{text}", sMessage);
+		return !(Channel.AutoClearChanBuffer() && m_pNetwork->IsUserOnline());
 	}
 
+#if 0
+	// TODO: use this conditionally, if server-time is off for this client
+	void AddBuffer(CChan& Channel, const CString& sMessage) {
+		if (!WantAdd(Channel))
+			return;
+		Channel.AddBuffer(":" + GetModNick() + "!" + GetModName() + "@znc.in PRIVMSG " + _NAMEDFMT(Channel.GetName()) + " :{text}", sMessage);
+	}
+#endif
+
 	virtual void OnRawMode(const CNick& OpNick, CChan& Channel, const CString& sModes, const CString& sArgs) {
-		AddBuffer(Channel, OpNick.GetNickMask() + " set mode: " + sModes + " " + sArgs);
+		if (!WantAdd(Channel))
+			return;
+		Channel.AddBuffer(":" + _NAMEDFMT(OpNick.GetNickMask()) + " MODE " + _NAMEDFMT(Channel.GetName()) + " " + sModes + " " + _NAMEDFMT(sArgs));
 	}
 
 	virtual void OnKick(const CNick& OpNick, const CString& sKickedNick, CChan& Channel, const CString& sMessage) {
-		AddBuffer(Channel, OpNick.GetNickMask() + " kicked " + sKickedNick + " Reason: [" + sMessage + "]");
+		if (!WantAdd(Channel))
+			return;
+		Channel.AddBuffer(":" + _NAMEDFMT(OpNick.GetNickMask()) + " KICK " + _NAMEDFMT(Channel.GetName()) + " " + _NAMEDFMT(sKickedNick) + " :{text}", sMessage);
 	}
 
 	virtual void OnQuit(const CNick& Nick, const CString& sMessage, const vector<CChan*>& vChans) {
 		vector<CChan*>::const_iterator it;
-		CString sMsg = Nick.GetNickMask() + " quit with message: [" + sMessage + "]";
+		CString sMsg = ":" + _NAMEDFMT(Nick.GetNickMask()) + " QUIT :" + sMessage;
 		for (it = vChans.begin(); it != vChans.end(); ++it) {
-			AddBuffer(**it, sMsg);
+			(**it).AddBuffer(sMsg);
 		}
 	}
 
 	virtual void OnJoin(const CNick& Nick, CChan& Channel) {
-		AddBuffer(Channel, Nick.GetNickMask() + " joined");
+		if (!WantAdd(Channel))
+			return;
+		Channel.AddBuffer(":" + _NAMEDFMT(Nick.GetNickMask()) + " JOIN " + _NAMEDFMT(Channel.GetName()));
 	}
 
 	virtual void OnPart(const CNick& Nick, CChan& Channel, const CString& sMessage) {
-		AddBuffer(Channel, Nick.GetNickMask() + " parted with message: [" + sMessage + "]");
+		if (!WantAdd(Channel))
+			return;
+		Channel.AddBuffer(":" + _NAMEDFMT(Nick.GetNickMask()) + " PART " + _NAMEDFMT(Channel.GetName()) + " :{text}", sMessage);
 	}
 
 	virtual void OnNick(const CNick& OldNick, const CString& sNewNick, const vector<CChan*>& vChans) {
 		vector<CChan*>::const_iterator it;
-		CString sMsg = OldNick.GetNickMask() + " is now known as " + sNewNick;
+		CString sMsg = ":" + _NAMEDFMT(OldNick.GetNickMask()) + " NICK " + _NAMEDFMT(sNewNick);
 		for (it = vChans.begin(); it != vChans.end(); ++it) {
-			AddBuffer(**it, sMsg);
+			(**it).AddBuffer(sMsg);
 		}
 	}
 
 	virtual EModRet OnTopic(CNick& Nick, CChan& Channel, CString& sTopic) {
-		AddBuffer(Channel, Nick.GetNickMask() + " changed the topic to: " + sTopic);
-
+		if (!WantAdd(Channel))
+			return CONTINUE;
+		Channel.AddBuffer(":" + _NAMEDFMT(Nick.GetNickMask()) + " TOPIC " + _NAMEDFMT(Channel.GetName()) + " :" + _NAMEDFMT(sTopic));
 		return CONTINUE;
 	}
 };
